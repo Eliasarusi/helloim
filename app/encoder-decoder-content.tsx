@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { decode, encode } from "./encoding"
 import { EmojiSelector } from "@/components/emoji-selector"
 import { ALPHABET_LIST, EMOJI_LIST } from "./emoji"
+import { Button } from "@/components/ui/button";
 
 export function Base64EncoderDecoderContent() {
   const router = useRouter()
@@ -94,6 +95,15 @@ export function Base64EncoderDecoderContent() {
         readOnly
         className="min-h-[100px]"
       />
+      <div className="flex justify-end mt-2">
+  <Button
+    onClick={() => {
+      navigator.clipboard.writeText(outputText);
+    }}
+  >
+    העתק טקסט
+  </Button>
+</div>
 
       {errorText && <div className="text-red-500 text-center">{errorText}</div>}
     </CardContent>

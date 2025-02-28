@@ -90,14 +90,14 @@ export function Base64EncoderDecoderContent() {
           </button>
         </div>
       </div>
-      <div className="font-bold text-sm">Pick an emoji</div>
+      <div className="font-bold text-sm">בחר אימוג'י</div>
       <EmojiSelector
         onEmojiSelect={setSelectedEmoji}
         selectedEmoji={selectedEmoji}
         emojiList={EMOJI_LIST}
         disabled={!isEncoding}
       />
-      <div className="font-bold text-sm">Or pick a standard alphabet letter</div>
+      <div className="font-bold text-sm">או שאתה יכול לבחור אות רגילה או תו</div>
       <EmojiSelector
         onEmojiSelect={setSelectedEmoji}
         selectedEmoji={selectedEmoji}

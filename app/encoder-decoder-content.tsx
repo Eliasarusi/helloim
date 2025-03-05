@@ -20,23 +20,21 @@ export function Base64EncoderDecoderContent() {
   const [errorText, setErrorText] = useState("")
   const [copySuccess, setCopySuccess] = useState(false)
   const [copyError, setCopyError] = useState(false)
-  
   // State עבור בחירת אימוג'י מוגדר מראש
   const [selectedEmoji, setSelectedEmoji] = useState("")
   // State עבור הזנה ידנית – בתיבה זו יהיה תו אחד בלבד
   const [customInput, setCustomInput] = useState("")
   // מצב שמציין אם להשתמש בהזנה ידנית (true) או במוגדר מראש (false)
   const [useCustom, setUseCustom] = useState(false)
-  
   const copyButtonRef = useRef<HTMLButtonElement>(null)
   const [copyButtonTop, setCopyButtonTop] = useState<number>(0)
-  
+
   const updateMode = (newMode: string) => {
     const params = new URLSearchParams(searchParams)
     params.set("mode", newMode)
     router.replace(`?${params.toString()}`)
   }
-  
+
   useEffect(() => {
     try {
       const emojiToUse = useCustom ? customInput : selectedEmoji
@@ -54,18 +52,18 @@ export function Base64EncoderDecoderContent() {
       setErrorText(`Error ${mode === "encode" ? "encoding" : "decoding"}: Invalid input`)
     }
   }, [mode, selectedEmoji, customInput, useCustom, inputText])
-  
+
   const handleModeToggle = (checked: boolean) => {
     updateMode(checked ? "encode" : "decode")
     setInputText("")
   }
-  
+
   useEffect(() => {
     if (!searchParams.has("mode")) {
       updateMode("encode")
     }
   }, [searchParams, updateMode])
-  
+
   const handlePasteFromClipboard = async () => {
     try {
       const clipboardText = await navigator.clipboard.readText()
@@ -74,7 +72,7 @@ export function Base64EncoderDecoderContent() {
       console.error("Error reading clipboard:", err)
     }
   }
-  
+
   const handleCustomInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     let graphemes: string[]
@@ -90,9 +88,9 @@ export function Base64EncoderDecoderContent() {
       setCustomInput(value)
     }
   }
-  
+
   const toggleDisabled = mode === "decode"
-  
+
   const getButtonClasses = (selected: boolean, disabled: boolean) => {
     if (disabled) {
       return "px-4 py-2 bg-gray-300 text-gray-500 border border-gray-300 rounded cursor-not-allowed"
@@ -101,9 +99,9 @@ export function Base64EncoderDecoderContent() {
       ? "px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 active:scale-95 transition-transform"
       : "px-4 py-2 bg-white text-blue-500 border border-blue-500 rounded hover:bg-blue-100 active:scale-95 transition-transform"
   }
-  
+
   const disabledAreaClasses = mode === "decode" ? "pointer-events-none opacity-50" : ""
-  
+
   const handleCopyText = async () => {
     try {
       await navigator.clipboard.writeText(outputText)
@@ -121,18 +119,18 @@ export function Base64EncoderDecoderContent() {
       }, 2000)
     }
   }
-  
+
   useEffect(() => {
     if (copyButtonRef.current) {
       const rect = copyButtonRef.current.getBoundingClientRect()
       setCopyButtonTop(rect.top + rect.height / 2)
     }
   }, [copySuccess, copyError])
-  
+
   return (
     <CardContent className="space-y-4">
       <p>
-         כלי זה יכול לך לקודד הודעה נסתרת לאימוג'י או אות אלפבית.
+        כלי זה יכול לך לקודד הודעה נסתרת לאימוג'י או אות אלפבית.
       </p>
       <div className="flex items-center justify-center space-x-2">
         <Label htmlFor="mode-toggle">Decode</Label>
@@ -155,20 +153,21 @@ export function Base64EncoderDecoderContent() {
           </button>
         </div>
       </div>
-      <div className="flex space-x-4">
-        <Button
-          onClick={() => setUseCustom(false)}
-          disabled={toggleDisabled}
-          className={getButtonClasses(!useCustom, toggleDisabled)}
-        >
-          בחירה מוגדרת מראש
-        </Button>
+      {/* החלפת סדר הכפתורים והעברת המכולה לימין עם מרווח מלמעלה */}
+      <div className="flex space-x-4 justify-end mt-4">
         <Button
           onClick={() => setUseCustom(true)}
           disabled={toggleDisabled}
           className={getButtonClasses(useCustom, toggleDisabled)}
         >
           הזנה ידנית
+        </Button>
+        <Button
+          onClick={() => setUseCustom(false)}
+          disabled={toggleDisabled}
+          className={getButtonClasses(!useCustom, toggleDisabled)}
+        >
+          בחירה מוגדרת מראש
         </Button>
       </div>
       <div className={`flex flex-col ${disabledAreaClasses}`}>

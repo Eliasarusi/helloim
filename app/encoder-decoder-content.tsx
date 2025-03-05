@@ -192,7 +192,7 @@ export function Base64EncoderDecoderContent() {
               emojiList={EMOJI_LIST}
               disabled={mode === "decode"}
             />
-            <div className="font-bold text-sm">או בחר אות/תו</div>
+            <div className="font-bold text-sm">או בחר תו</div>
             <EmojiSelector
               onEmojiSelect={setSelectedEmoji}
               selectedEmoji={selectedEmoji}

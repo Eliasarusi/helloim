@@ -42,6 +42,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
+    "crypto-js": "^4.2.0",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
@@ -67,5 +68,21 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
     "vitest": "^3.0.4"
-  }
+  },
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eliasarusi/helloim.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Eliasarusi/helloim/issues"
+  },
+  "homepage": "https://github.com/Eliasarusi/helloim#readme",
+  "description": ""
 }

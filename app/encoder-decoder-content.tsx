@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { decode, encode } from "./encoding"
 import { EmojiSelector } from "@/components/emoji-selector"
 import { ALPHABET_LIST, EMOJI_LIST } from "./emoji"
-import zxcvbn from "zxcvbn"  // ייבוא zxcvbn לבדיקת חוזק הסיסמה
 
 // פונקציות עזר להצפנה/פענוח באמצעות Web Crypto API
 function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
@@ -135,7 +134,7 @@ export function Base64EncoderDecoderContent() {
   const [decryptedResult, setDecryptedResult] = useState("")
   const [requiresPassword, setRequiresPassword] = useState(false)
 
-  // מד חוזק סיסמה מבוסס zxcvbn
+  // מד חוזק סיסמה מבוסס zxcvbn (ייבוא דינמי)
   const [passwordStrength, setPasswordStrength] = useState<{ score: number; feedback: string }>({
     score: 0,
     feedback: "",
@@ -189,42 +188,6 @@ export function Base64EncoderDecoderContent() {
     }
     doEncryptionDecryption()
   }, [mode, selectedEmoji, customInput, useCustom, inputText, usePasswordEncryption, password])
-
-  // עדכון חוזק הסיסמה בכל שינוי בערך הסיסמה – onChange וגם onInput
-  useEffect(() => {
-    const result = zxcvbn(password)
-    let feedback = ""
-    switch (result.score) {
-      case 0:
-        feedback = "חלשה מאוד"
-        break
-      case 1:
-        feedback = "חלשה"
-        break
-      case 2:
-        feedback = "מתונה"
-        break
-      case 3:
-        feedback = "טובה"
-        break
-      case 4:
-        feedback = "חזקה מאוד"
-        break
-      default:
-        feedback = "לא ידוע"
-        break
-    }
-    setPasswordStrength({ score: result.score, feedback })
-  }, [password])
-
-  const handleModeToggle = (checked: boolean) => {
-    updateMode(checked ? "encode" : "decode")
-    setInputText("")
-    if (!checked) {
-      setDecryptedResult("")
-      setRequiresPassword(false)
-    }
-  }
 
   useEffect(() => {
     if (!searchParams.has("mode")) {
@@ -309,6 +272,45 @@ export function Base64EncoderDecoderContent() {
     } catch (e) {
       setErrorText("סיסמה שגויה או טקסט לא תקין")
       setDecryptedResult("")
+    }
+  }
+
+  // עדכון חוזק הסיסמה באמצעות dynamic import של zxcvbn
+  useEffect(() => {
+    (async () => {
+      const { default: zxcvbnDynamic } = await import("zxcvbn")
+      const result = zxcvbnDynamic(password)
+      let feedback = ""
+      switch (result.score) {
+        case 0:
+          feedback = "חלשה מאוד"
+          break
+        case 1:
+          feedback = "חלשה"
+          break
+        case 2:
+          feedback = "מתונה"
+          break
+        case 3:
+          feedback = "טובה"
+          break
+        case 4:
+          feedback = "חזקה מאוד"
+          break
+        default:
+          feedback = "לא ידוע"
+          break
+      }
+      setPasswordStrength({ score: result.score, feedback })
+    })()
+  }, [password])
+
+  const handleModeToggle = (checked: boolean) => {
+    updateMode(checked ? "encode" : "decode")
+    setInputText("")
+    if (!checked) {
+      setDecryptedResult("")
+      setRequiresPassword(false)
     }
   }
 

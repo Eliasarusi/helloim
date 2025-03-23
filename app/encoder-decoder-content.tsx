@@ -2,43 +2,144 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-
 import { Textarea } from "@/components/ui/textarea"
 import { CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-
 import { decode, encode } from "./encoding"
 import { EmojiSelector } from "@/components/emoji-selector"
 import { ALPHABET_LIST, EMOJI_LIST } from "./emoji"
+import zxcvbn from "zxcvbn"  // ייבוא zxcvbn לבדיקת חוזק הסיסמה
 
-// ייבוא ספריית crypto-js להצפנה עם סיסמה
-import CryptoJS from "@/node_modules/crypto-js"
+// פונקציות עזר להצפנה/פענוח באמצעות Web Crypto API
+function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+  let binary = ""
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+  bytes.forEach((b) => (binary += String.fromCharCode(b)))
+  return btoa(binary)
+}
+
+function base64ToArrayBuffer(base64: string): Uint8Array {
+  const binary_string = atob(base64)
+  const len = binary_string.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary_string.charCodeAt(i)
+  }
+  return bytes
+}
+
+async function encryptWithPassword(plainText: string, password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const enc = new TextEncoder()
+  const passwordBytes = enc.encode(password)
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    passwordBytes,
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  )
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: salt,
+      iterations: 250000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt"]
+  )
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const plainTextBytes = enc.encode(plainText)
+  const ciphertextBuffer = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv: iv,
+    },
+    key,
+    plainTextBytes
+  )
+  const saltB64 = arrayBufferToBase64(salt)
+  const ivB64 = arrayBufferToBase64(iv)
+  const ciphertextB64 = arrayBufferToBase64(new Uint8Array(ciphertextBuffer))
+  return `${saltB64}:${ivB64}:${ciphertextB64}`
+}
+
+async function decryptWithPassword(encryptedData: string, password: string): Promise<string> {
+  const parts = encryptedData.split(":")
+  if (parts.length !== 3) {
+    throw new Error("Invalid encrypted data format")
+  }
+  const [saltB64, ivB64, ciphertextB64] = parts
+  const salt = base64ToArrayBuffer(saltB64)
+  const iv = base64ToArrayBuffer(ivB64)
+  const ciphertext = base64ToArrayBuffer(ciphertextB64)
+  const enc = new TextEncoder()
+  const passwordBytes = enc.encode(password)
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    passwordBytes,
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  )
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: salt,
+      iterations: 250000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["decrypt"]
+  )
+  try {
+    const decryptedBuffer = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: iv,
+      },
+      key,
+      ciphertext
+    )
+    const dec = new TextDecoder()
+    return dec.decode(decryptedBuffer)
+  } catch (e) {
+    throw new Error("Decryption failed")
+  }
+}
 
 export function Base64EncoderDecoderContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const mode = searchParams.get("mode") || "encode"
 
-  // מצבים עיקריים
   const [inputText, setInputText] = useState("")
   const [outputText, setOutputText] = useState("")
   const [errorText, setErrorText] = useState("")
   const [copySuccess, setCopySuccess] = useState(false)
   const [copyError, setCopyError] = useState(false)
 
-  // בחירת אימוג'י או אות מוגדר מראש
   const [selectedEmoji, setSelectedEmoji] = useState("")
   const [customInput, setCustomInput] = useState("")
   const [useCustom, setUseCustom] = useState(false)
 
-  // מצבים עבור הצפנה עם סיסמה
   const [usePasswordEncryption, setUsePasswordEncryption] = useState(false)
-  // שדה הסיסמה מוגדר כ-type="text" כך שהמקלדת באנדרואיד תאפשר הוספת אימוג'ים
   const [password, setPassword] = useState("")
   const [decryptedResult, setDecryptedResult] = useState("")
   const [requiresPassword, setRequiresPassword] = useState(false)
+
+  // מד חוזק סיסמה מבוסס zxcvbn
+  const [passwordStrength, setPasswordStrength] = useState<{ score: number; feedback: string }>({
+    score: 0,
+    feedback: "",
+  })
 
   const copyButtonRef = useRef<HTMLButtonElement>(null)
   const [copyButtonTop, setCopyButtonTop] = useState<number>(0)
@@ -50,47 +151,71 @@ export function Base64EncoderDecoderContent() {
   }
 
   useEffect(() => {
-    try {
-      const emojiToUse = useCustom ? customInput : selectedEmoji
-      const isEncoding = mode === "encode"
-
-      if (isEncoding && usePasswordEncryption) {
-        if (!password) {
-          setErrorText("יש להגדיר סיסמה")
-          setOutputText("")
-          return
-        }
-        // הצפנה של הטקסט באמצעות AES
-        const encrypted = CryptoJS.AES.encrypt(inputText, password).toString()
-        // הוספת מזהה "PW:" לתחילת הטקסט המוצפן
-        const prefixed = "PW:" + encrypted
-        const output = encode(emojiToUse, prefixed)
-        setOutputText(output)
-        setErrorText("")
-      } else if (isEncoding && !usePasswordEncryption) {
-        let output = encode(emojiToUse, inputText)
-        setOutputText(output)
-        setErrorText("")
-      } else {
-        // מצב decode:
-        let decoded = decode(inputText)
-        decoded = decoded
-          .replace(/\uFE0F/g, '')
-          .replace(/[\x00-\x1F\x7F]/g, '')
-        if (decoded.startsWith("PW:")) {
-          setRequiresPassword(true)
-          setOutputText("")
+    const doEncryptionDecryption = async () => {
+      try {
+        const emojiToUse = useCustom ? customInput : selectedEmoji
+        const isEncoding = mode === "encode"
+        if (isEncoding && usePasswordEncryption) {
+          if (!password) {
+            setErrorText("יש להזין סיסמה")
+            setOutputText("")
+            return
+          }
+          const encrypted = await encryptWithPassword(inputText, password)
+          const prefixed = "PW:" + encrypted
+          const output = encode(emojiToUse, prefixed)
+          setOutputText(output)
+          setErrorText("")
+        } else if (isEncoding && !usePasswordEncryption) {
+          let output = encode(emojiToUse, inputText)
+          setOutputText(output)
+          setErrorText("")
         } else {
-          setRequiresPassword(false)
-          setOutputText(decoded)
+          let decoded = decode(inputText)
+          decoded = decoded.replace(/\uFE0F/g, "").replace(/[\x00-\x1F\x7F]/g, "")
+          if (decoded.startsWith("PW:")) {
+            setRequiresPassword(true)
+            setOutputText("")
+          } else {
+            setRequiresPassword(false)
+            setOutputText(decoded)
+          }
+          setErrorText("")
         }
-        setErrorText("")
+      } catch (e) {
+        setOutputText("")
+        setErrorText(`Error ${mode === "encode" ? "encoding" : "decoding"}: Invalid input`)
       }
-    } catch (e) {
-      setOutputText("")
-      setErrorText(`Error ${mode === "encode" ? "encoding" : "decoding"}: Invalid input`)
     }
+    doEncryptionDecryption()
   }, [mode, selectedEmoji, customInput, useCustom, inputText, usePasswordEncryption, password])
+
+  // עדכון חוזק הסיסמה בכל שינוי בערך הסיסמה – onChange וגם onInput
+  useEffect(() => {
+    const result = zxcvbn(password)
+    let feedback = ""
+    switch (result.score) {
+      case 0:
+        feedback = "חלשה מאוד"
+        break
+      case 1:
+        feedback = "חלשה"
+        break
+      case 2:
+        feedback = "מתונה"
+        break
+      case 3:
+        feedback = "טובה"
+        break
+      case 4:
+        feedback = "חזקה מאוד"
+        break
+      default:
+        feedback = "לא ידוע"
+        break
+    }
+    setPasswordStrength({ score: result.score, feedback })
+  }, [password])
 
   const handleModeToggle = (checked: boolean) => {
     updateMode(checked ? "encode" : "decode")
@@ -148,16 +273,12 @@ export function Base64EncoderDecoderContent() {
       await navigator.clipboard.writeText(outputText)
       setCopySuccess(true)
       setCopyError(false)
-      setTimeout(() => {
-        setCopySuccess(false)
-      }, 2000)
+      setTimeout(() => setCopySuccess(false), 2000)
     } catch (err) {
       console.error("Error copying text:", err)
       setCopyError(true)
       setCopySuccess(false)
-      setTimeout(() => {
-        setCopyError(false)
-      }, 2000)
+      setTimeout(() => setCopyError(false), 2000)
     }
   }
 
@@ -168,19 +289,16 @@ export function Base64EncoderDecoderContent() {
     }
   }, [copySuccess, copyError])
 
-  const handleDecryptWithPassword = () => {
+  const handleDecryptWithPassword = async () => {
     try {
       if (!password) {
         setErrorText("יש להזין סיסמה לפיענוח")
         setDecryptedResult("")
         return
       }
-      const decoded = decode(inputText)
-        .replace(/\uFE0F/g, '')
-        .replace(/[\x00-\x1F\x7F]/g, '')
-      const encryptedPart = decoded.slice(3) // הסרת "PW:"
-      const bytes = CryptoJS.AES.decrypt(encryptedPart, password)
-      const originalText = bytes.toString(CryptoJS.enc.Utf8)
+      const decoded = decode(inputText).replace(/\uFE0F/g, "").replace(/[\x00-\x1F\x7F]/g, "")
+      const encryptedPart = decoded.slice(3)
+      const originalText = await decryptWithPassword(encryptedPart, password)
       if (!originalText) {
         setErrorText("סיסמה שגויה")
         setDecryptedResult("")
@@ -204,7 +322,6 @@ export function Base64EncoderDecoderContent() {
         <Switch id="mode-toggle" checked={mode === "encode"} onCheckedChange={handleModeToggle} />
         <Label htmlFor="mode-toggle">Encode</Label>
       </div>
-
       {mode === "encode" && (
         <div className="flex items-center justify-center mt-4">
           <Label htmlFor="password-toggle" className="mr-2">הצפנה עם סיסמה</Label>
@@ -219,7 +336,6 @@ export function Base64EncoderDecoderContent() {
           />
         </div>
       )}
-
       {mode === "encode" && usePasswordEncryption && (
         <div className="flex flex-col space-y-2">
           <Label className="font-bold text-sm">הזן סיסמה להצפנה:</Label>
@@ -228,11 +344,14 @@ export function Base64EncoderDecoderContent() {
             placeholder="הזן סיסמה"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
             className="border rounded p-2"
           />
+          <div className="text-sm">
+            עוצמת הסיסמה: {passwordStrength.feedback} (Score: {passwordStrength.score})
+          </div>
         </div>
       )}
-
       <div className="flex flex-col">
         <Textarea
           placeholder={mode === "encode" ? "הזן טקסט להצפנה" : "הדבק טקסט לפיענוח"}
@@ -249,7 +368,6 @@ export function Base64EncoderDecoderContent() {
           </button>
         </div>
       </div>
-
       <div className="flex space-x-4">
         <Button
           onClick={() => setUseCustom(false)}
@@ -266,7 +384,6 @@ export function Base64EncoderDecoderContent() {
           הזנה ידנית
         </Button>
       </div>
-
       <div className={`flex flex-col ${disabledAreaClasses}`}>
         {useCustom ? (
           <div className="flex flex-col">
@@ -299,7 +416,6 @@ export function Base64EncoderDecoderContent() {
           </>
         )}
       </div>
-
       {(mode === "encode" || (mode === "decode" && !requiresPassword)) && (
         <Textarea
           placeholder={mode === "encode" ? "פלט מוצפן" : "פלט מפוענח"}
@@ -308,7 +424,6 @@ export function Base64EncoderDecoderContent() {
           className="min-h-[100px]"
         />
       )}
-
       {mode === "decode" && requiresPassword && (
         <div className="flex flex-col space-y-2">
           <Label className="font-bold text-sm">הזן סיסמה לפיענוח:</Label>
@@ -317,6 +432,7 @@ export function Base64EncoderDecoderContent() {
             placeholder="הזן סיסמה"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
             className="border rounded p-2"
           />
           <Button
@@ -333,7 +449,6 @@ export function Base64EncoderDecoderContent() {
           />
         </div>
       )}
-
       <div className="relative flex items-center justify-end mt-2">
         <Button
           ref={copyButtonRef}
